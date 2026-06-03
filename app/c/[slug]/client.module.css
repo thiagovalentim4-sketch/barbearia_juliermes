@@ -1,0 +1,427 @@
+.wrapper {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  background-color: var(--bg-primary);
+  padding: 16px;
+}
+
+.container {
+  width: 100%;
+  max-width: 480px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.header {
+  padding: 24px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.05) 0%, rgba(0, 0, 0, 0) 100%);
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.content {
+  padding: 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.progressContainer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.progressLine {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--border);
+  z-index: 1;
+  transform: translateY(-50%);
+}
+
+.progressFill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 2px;
+  background-color: var(--primary);
+  z-index: 1;
+  transform: translateY(-50%);
+  transition: width 0.3s ease;
+}
+
+.progressStep {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--bg-tertiary);
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: bold;
+  z-index: 2;
+  transition: all 0.3s ease;
+}
+
+.stepActive {
+  border-color: var(--primary);
+  background-color: var(--bg-secondary);
+  color: var(--primary);
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+.stepCompleted {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  color: #000;
+}
+
+.stepTitle {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.stepDescription {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+/* Listas de Seleção */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.itemCard {
+  position: relative;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.itemCard:hover {
+  border-color: var(--text-muted);
+}
+
+.itemSelected {
+  border-color: var(--primary);
+  background-color: rgba(212, 175, 55, 0.05);
+  box-shadow: 0 0 12px var(--primary-glow);
+}
+
+/* Promo Card Específico (Panfleto de Promoções) */
+.promoCard {
+  border: 1px solid #00e676 !important;
+  background: linear-gradient(135deg, rgba(0, 230, 118, 0.06) 0%, rgba(0, 0, 0, 0) 100%) !important;
+  box-shadow: 0 0 12px rgba(0, 230, 118, 0.1) !important;
+}
+
+.promoCard:hover {
+  border-color: #00ff80 !important;
+  box-shadow: 0 0 16px rgba(0, 230, 118, 0.2) !important;
+}
+
+.promoCard.itemSelected {
+  background: linear-gradient(135deg, rgba(0, 230, 118, 0.1) 0%, rgba(212, 175, 55, 0.05) 100%) !important;
+  box-shadow: 0 0 16px rgba(0, 230, 118, 0.2) !important;
+}
+
+.promoBadge {
+  position: absolute;
+  top: -10px;
+  right: 12px;
+  background-color: #00e676;
+  color: #000;
+  font-size: 0.65rem;
+  font-weight: 850;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.itemInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.itemName {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.itemSub {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.itemPrice {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 1.05rem;
+}
+
+/* Card Profissional */
+.profCard {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border);
+}
+
+.itemSelected .avatar {
+  border-color: var(--primary);
+}
+
+/* Calendário Semanal */
+.weekDays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dayButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 4px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dayButton:hover {
+  border-color: var(--text-muted);
+}
+
+.dayActive {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  color: #000;
+  font-weight: 600;
+}
+
+.dayLabel {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  opacity: 0.7;
+}
+
+.dayValue {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+/* Grade de Slots */
+.slotsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.slotButton {
+  padding: 10px 6px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.slotButton:hover {
+  border-color: var(--text-muted);
+}
+
+.slotActive {
+  border-color: var(--primary);
+  background-color: rgba(212, 175, 55, 0.15);
+  color: var(--primary);
+}
+
+.noSlots {
+  grid-column: span 4;
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Rodapé de Ações */
+.footer {
+  padding: 20px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.footerSingle {
+  justify-content: flex-end;
+}
+
+/* Sucesso */
+.successContainer {
+  text-align: center;
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.successIcon {
+  width: 64px;
+  height: 64px;
+  background-color: rgba(16, 185, 129, 0.1);
+  border-radius: 50%;
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.successTitle {
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+
+.successSummary {
+  width: 100%;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.summaryLabel {
+  color: var(--text-secondary);
+}
+
+.summaryValue {
+  font-weight: 600;
+}
+
+.badge {
+  padding: 2px 8px;
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* Informações da Barbearia (Painel Informativo na página do cliente) */
+.barberDetailsCard {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.detailRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.detailIcon {
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.amenitiesGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.amenityItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+}
