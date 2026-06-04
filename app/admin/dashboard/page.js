@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase, mockDb, isMockMode } from '@/lib/supabase';
 import { criarDataHoraCompleta } from '@/lib/scheduler';
 import styles from '../admin.module.css';
-import { Calendar, Clock, DollarSign, Ban, Plus, X, Trash2, CalendarCheck, ShieldAlert } from 'lucide-react';
+import { Calendar, Clock, DollarSign, Ban, Plus, X, Trash2, CalendarCheck, ShieldAlert, RefreshCw } from 'lucide-react';
 
 export default function DashboardAdmin() {
   const [profissional, setProfissional] = useState(null);
@@ -13,6 +13,7 @@ export default function DashboardAdmin() {
   const [bloqueios, setBloqueios] = useState([]);
   const [servicos, setServicos] = useState([]);
   const [carregando, setCarregando] = useState(true);
+  const [usarModoMock, setUsarModoMock] = useState(isMockMode);
 
   // Estados do Modal de Bloqueio
   const [modalAberto, setModalAberto] = useState(false);
@@ -36,52 +37,99 @@ export default function DashboardAdmin() {
       try {
         let prof = null;
         let servs = [];
+        let modoMock = isMockMode;
         
         if (isMockMode) {
           const profs = await mockDb.getProfissionais();
           if (profs.length > 0) prof = profs[0];
           servs = await mockDb.getServicos();
         } else {
-          // Supabase real: busca o usuário logado
-          const { data: { user } } = await supabase.auth.getUser();
-          
-          if (user) {
-            // Buscar barbearia cujo proprietário é o usuário logado
-            const { data: barbeariaData, error: bError } = await supabase
-              .from('barbearias')
-              .select('id')
-              .eq('owner_id', user.id)
-              .single();
+        console.log('🔍 Iniciando modo REAL do Supabase...');
+        
+        // Supabase real: busca o usuário logado
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        console.log('👤 Usuário do Supabase:', { user, userError });
+        
+        if (user) {
+          // Buscar barbearia cujo proprietário é o usuário logado
+          console.log('🔍 Buscando barbearias com owner_id:', user.id);
+          const { data: barbeariaData, error: bError } = await supabase
+            .from('barbearias')
+            .select('*')
+            .eq('owner_id', user.id)
+            .single();
+            
+          console.log('🏪 Resultado da busca de barbearias:', { barbeariaData, bError });
+            
+          if (bError) {
+            console.warn("⚠️ Nenhuma barbearia vinculada ao seu usuário. Usando modo mock.");
+            // Fallback para mock
+            modoMock = true;
+            const profs = await mockDb.getProfissionais();
+            if (profs.length > 0) prof = profs[0];
+            servs = await mockDb.getServicos();
+          } else if (barbeariaData) {
+            console.log('✅ Barbearia encontrada:', barbeariaData);
+            
+            // Buscar profissionais da barbearia encontrada
+            console.log('🔍 Buscando profissionais da barbearia ID:', barbeariaData.id);
+            const { data: profs, error: pError } = await supabase
+              .from('profissionais')
+              .select('*')
+              .eq('barbearia_id', barbeariaData.id);
               
-            if (bError) {
-              console.warn("Nenhuma barbearia vinculada ao seu usuário. Certifique-se de executar popular_dados_teste no banco.");
+            console.log('👨‍💼 Profissionais encontrados:', { profs, pError });
+              
+            if (profs && profs.length > 0) {
+              prof = profs[0]; // Seleciona o primeiro profissional por padrão
+            } else {
+              console.warn('⚠️ Nenhum profissional encontrado! Usando mock.');
+              const profsMock = await mockDb.getProfissionais();
+              if (profsMock.length > 0) prof = profsMock[0];
             }
-
-            if (barbeariaData) {
-              // Buscar profissionais da barbearia encontrada
-              const { data: profs } = await supabase
-                .from('profissionais')
-                .select('*')
-                .eq('barbearia_id', barbeariaData.id);
-                
-              if (profs && profs.length > 0) {
-                prof = profs[0]; // Seleciona o primeiro profissional por padrão
-              }
+            
+            // Buscar serviços da barbearia encontrada
+            console.log('🔍 Buscando serviços da barbearia ID:', barbeariaData.id);
+            const { data: s, error: sError } = await supabase
+              .from('servicos')
+              .select('*')
+              .eq('barbearia_id', barbeariaData.id);
               
-              // Buscar serviços da barbearia encontrada
-              const { data: s } = await supabase
-                .from('servicos')
-                .select('*')
-                .eq('barbearia_id', barbeariaData.id);
-              servs = s || [];
+            console.log('✂️ Serviços encontrados:', { s, sError });
+            servs = s || [];
+            
+            if (servs.length === 0) {
+              console.warn('⚠️ Nenhum serviço encontrado! Usando mock.');
+              servs = await mockDb.getServicos();
             }
           }
+        } else {
+          console.warn('⚠️ Nenhum usuário logado no Supabase! Usando modo mock.');
+          // Se não houver usuário logado, usa modo mock
+          modoMock = true;
+          const profs = await mockDb.getProfissionais();
+          if (profs.length > 0) prof = profs[0];
+          servs = await mockDb.getServicos();
         }
+      }
         
+        console.log('🔐 Dashboard inicializado: usarModoMock=', modoMock, 'profissional=', prof, 'servicos=', servs);
+        setUsarModoMock(modoMock);
         setProfissional(prof);
         setServicos(servs);
       } catch (err) {
         console.error('Erro na inicialização do painel:', err);
+        // Fallback para mock em caso de erro
+        try {
+          const profs = await mockDb.getProfissionais();
+          const prof = profs.length > 0 ? profs[0] : null;
+          const servs = await mockDb.getServicos();
+          setUsarModoMock(true);
+          setProfissional(prof);
+          setServicos(servs);
+        } catch (mockErr) {
+          console.error('Erro no fallback mock:', mockErr);
+        }
       }
     }
     inicializar();
@@ -91,51 +139,90 @@ export default function DashboardAdmin() {
   const carregarAgendaDoDia = async () => {
     if (!profissional || !dataSelecionada) return;
     try {
+      console.log('🔄 Carregando agenda para:', dataSelecionada, 'Profissional:', profissional.id);
       setCarregando(true);
       let ags = [];
       let bloqs = [];
 
-      if (isMockMode) {
-        ags = await mockDb.getAgendamentos(profissional.id);
-        bloqs = await mockDb.getBloqueios(profissional.id);
+      if (usarModoMock) {
+        // No modo mock, ignoramos o profissionalId e pegamos TUDO
+        ags = await mockDb.getAgendamentos();
+        bloqs = await mockDb.getBloqueios();
       } else {
-        const dataInicio = `${dataSelecionada}T00:00:00.000Z`;
-        const dataFim = `${dataSelecionada}T23:59:59.999Z`;
+          try {
+            console.log('📅 Buscando agendamentos no Supabase para:', dataSelecionada, 'Profissional:', profissional.id);
+            
+            // Criar data no fuso horário LOCAL!
+            const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
+            const dataInicioLocal = new Date(ano, mes - 1, dia, 0, 0, 0);
+            const dataFimLocal = new Date(ano, mes - 1, dia, 23, 59, 59, 999);
+            
+            const dataInicio = dataInicioLocal.toISOString();
+            const dataFim = dataFimLocal.toISOString();
+            
+            console.log('📅 Intervalo de busca (LOCAL para UTC):', dataInicioLocal, dataInicio, 'até', dataFimLocal, dataFim);
 
-        const { data: agData } = await supabase
-          .from('agendamentos')
-          .select('*, servicos(nome, preco, duracao_minutos)')
-          .eq('profissional_id', profissional.id)
-          .gte('data_hora', dataInicio)
-          .lte('data_hora', dataFim);
-        
-        const { data: bloqData } = await supabase
-          .from('bloqueios')
-          .select('*')
-          .eq('profissional_id', profissional.id)
-          .gte('data_hora_inicio', dataInicio)
-          .lte('data_hora_fim', dataFim);
+            const { data: agData, error: agError } = await supabase
+              .from('agendamentos')
+              .select('*, servicos(nome, preco, duracao_minutos)')
+              .eq('profissional_id', profissional.id)
+              .gte('data_hora', dataInicio)
+              .lte('data_hora', dataFim);
+            
+            console.log('📅 Agendamentos do Supabase:', { agData, agError });
+            
+            const { data: bloqData, error: bloqError } = await supabase
+              .from('bloqueios')
+              .select('*')
+              .eq('profissional_id', profissional.id)
+              .gte('data_hora_inicio', dataInicio)
+              .lte('data_hora_fim', dataFim);
 
-        ags = agData || [];
-        bloqs = bloqData || [];
-      }
+            console.log('🚫 Bloqueios do Supabase:', { bloqData, bloqError });
+
+            ags = agData || [];
+            bloqs = bloqData || [];
+          } catch (err) {
+            console.error('❌ Erro ao carregar do Supabase, usando mock:', err);
+            // Fallback para mock
+            ags = await mockDb.getAgendamentos(profissional.id);
+            bloqs = await mockDb.getBloqueios(profissional.id);
+          }
+        }
 
       // Filtrar agendamentos do dia selecionado no frontend se for modo mock
-      if (isMockMode) {
+      if (usarModoMock) {
+        console.log('🔍 Filtrando mock: dataSelecionada=', dataSelecionada, 'total agendamentos=', ags.length);
+        
+        // Criar intervalo do dia selecionado (LOCAL!)
+        const [anoSel, mesSel, diaSel] = dataSelecionada.split('-').map(Number);
+        const inicioDiaLocal = new Date(anoSel, mesSel - 1, diaSel, 0, 0, 0, 0);
+        const fimDiaLocal = new Date(anoSel, mesSel - 1, diaSel, 23, 59, 59, 999);
+        
+        console.log('🔍 Intervalo do dia selecionado (LOCAL):', inicioDiaLocal, 'até', fimDiaLocal);
+        
         ags = ags.filter(a => {
-          const aDataStr = new Date(a.data_hora).toISOString().split('T')[0];
-          return aDataStr === dataSelecionada;
+          const dataAgendamento = new Date(a.data_hora);
+          const match = dataAgendamento >= inicioDiaLocal && dataAgendamento <= fimDiaLocal;
+          console.log(`   → Agendamento ${a.id}: data_hora=${a.data_hora} (LOCAL: ${dataAgendamento}), match=${match}`);
+          return match;
         });
 
         bloqs = bloqs.filter(b => {
-          const bDataStr = new Date(b.data_hora_inicio).toISOString().split('T')[0];
-          return bDataStr === dataSelecionada;
+          const dataBloqueio = new Date(b.data_hora_inicio);
+          const match = dataBloqueio >= inicioDiaLocal && dataBloqueio <= fimDiaLocal;
+          return match;
         });
+        
+        console.log('🔍 Agendamentos após filtro:', ags.length);
       }
 
       // Ordenar agendamentos por hora
       ags.sort((a, b) => new Date(a.data_hora) - new Date(b.data_hora));
       bloqs.sort((a, b) => new Date(a.data_hora_inicio) - new Date(b.data_hora_inicio));
+      
+      console.log('📅 Agendamentos carregados:', ags);
+      console.log('🚫 Bloqueios carregados:', bloqs);
 
       setAgendamentos(ags);
       setBloqueios(bloqs);
@@ -165,14 +252,19 @@ export default function DashboardAdmin() {
   const cancelarAgendamento = async (id) => {
     if (!confirm('Deseja realmente cancelar este agendamento? Um lembrete de cancelamento poderá ser enviado.')) return;
     try {
-      if (isMockMode) {
+      if (usarModoMock) {
         await mockDb.cancelAgendamento(id);
       } else {
-        const { error } = await supabase
-          .from('agendamentos')
-          .update({ status: 'cancelado' })
-          .eq('id', id);
-        if (error) throw error;
+        try {
+          const { error } = await supabase
+            .from('agendamentos')
+            .update({ status: 'cancelado' })
+            .eq('id', id);
+          if (error) throw error;
+        } catch (err) {
+          console.error('Erro no Supabase, usando mock:', err);
+          await mockDb.cancelAgendamento(id);
+        }
       }
       
       // Atualizar lista local
@@ -207,11 +299,16 @@ export default function DashboardAdmin() {
         motivo: motivoBloqueio
       };
 
-      if (isMockMode) {
+      if (usarModoMock) {
         await mockDb.saveBloqueio(dadosBloqueio);
       } else {
-        const { error } = await supabase.from('bloqueios').insert([dadosBloqueio]);
-        if (error) throw error;
+        try {
+          const { error } = await supabase.from('bloqueios').insert([dadosBloqueio]);
+          if (error) throw error;
+        } catch (err) {
+          console.error('Erro no Supabase, usando mock:', err);
+          await mockDb.saveBloqueio(dadosBloqueio);
+        }
       }
 
       setModalAberto(false);
@@ -227,11 +324,16 @@ export default function DashboardAdmin() {
   // Excluir Bloqueio
   const excluirBloqueio = async (id) => {
     try {
-      if (isMockMode) {
+      if (usarModoMock) {
         await mockDb.deleteBloqueio(id);
       } else {
-        const { error } = await supabase.from('bloqueios').delete().eq('id', id);
-        if (error) throw error;
+        try {
+          const { error } = await supabase.from('bloqueios').delete().eq('id', id);
+          if (error) throw error;
+        } catch (err) {
+          console.error('Erro no Supabase, usando mock:', err);
+          await mockDb.deleteBloqueio(id);
+        }
       }
       carregarAgendaDoDia();
     } catch (err) {
@@ -258,6 +360,36 @@ export default function DashboardAdmin() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
+          <button 
+            onClick={async () => {
+              // Adicionar agendamento de teste HOJE
+              const agora = new Date();
+              const dataStr = `${agora.getFullYear()}-${String(agora.getMonth()+1).padStart(2,'0')}-${String(agora.getDate()).padStart(2,'0')}`;
+              const horaStr = `${String(agora.getHours()+1).padStart(2,'0')}:00`;
+              
+              await mockDb.saveAgendamento({
+                profissional_id: 'p1-julermes-id',
+                servico_id: 's2-corte-id',
+                cliente_nome: 'TESTE ADMIN',
+                cliente_telefone: '(11) 99999-9999',
+                data_hora: new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), agora.getHours()+1, 0, 0).toISOString(),
+                status: 'confirmado'
+              });
+              
+              carregarAgendaDoDia();
+            }} 
+            className="btn btn-secondary"
+            disabled={!profissional}
+          >
+            <Plus size={18} /> Testar Agendamento
+          </button>
+          <button 
+            onClick={() => carregarAgendaDoDia()} 
+            className="btn btn-secondary"
+            disabled={!profissional}
+          >
+            <RefreshCw size={18} /> Atualizar
+          </button>
           <button 
             onClick={() => setModalAberto(true)} 
             className="btn btn-primary"
@@ -300,12 +432,15 @@ export default function DashboardAdmin() {
         <div className={styles.miniCalendar}>
           <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 16 }}>Selecionar Dia</h3>
           <div className="input-group">
-            <input 
-              type="date" 
-              className="input-field" 
+            <input
+              type="date"
+              className="input-field"
               value={dataSelecionada}
               onChange={(e) => setDataSelecionada(e.target.value)}
             />
+            <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'var(--text-secondary)' }}>
+              Data selecionada: {new Date(dataSelecionada + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
           </div>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 12 }}>
             💡 Escolha a data acima para conferir os compromissos agendados e gerenciar horários.
@@ -315,8 +450,8 @@ export default function DashboardAdmin() {
         {/* Lado Direito: Listagem da Agenda */}
         <div>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: 16 }}>
-            Compromissos de {new Date(dataSelecionada + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </h2>
+              Compromissos de {new Date(dataSelecionada + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </h2>
 
           {carregando ? (
             <div className="flex-center" style={{ padding: '40px', color: 'var(--text-secondary)' }}>
@@ -348,23 +483,28 @@ export default function DashboardAdmin() {
               })}
 
               {/* Seção de Agendamentos do Dia */}
-              {agendamentos.length === 0 && bloqueios.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-secondary)', border: '1px dashed var(--border)', borderRadius: 'var(--radius-lg)' }}>
-                  Nenhum compromisso ou bloqueio para este dia.
-                </div>
-              ) : (
-                agendamentos.map((appt) => {
-                  const s = obterDetalhesServico(appt);
-                  const hora = new Date(appt.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                  const eCancelado = appt.status === 'cancelado';
+          {agendamentos.length === 0 && bloqueios.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-secondary)', border: '1px dashed var(--border)', borderRadius: 'var(--radius-lg)' }}>
+              Nenhum compromisso ou bloqueio para este dia.
+            </div>
+          ) : (
+            agendamentos.map((appt) => {
+              const s = obterDetalhesServico(appt);
+              
+              // Data e hora em formato BRASILEIRO (fuso horário local!)
+              const dataHoraLocal = new Date(appt.data_hora);
+              const hora = dataHoraLocal.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+              const dataFormatada = dataHoraLocal.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+              
+              const eCancelado = appt.status === 'cancelado';
 
-                  return (
-                    <div 
-                      key={appt.id} 
-                      className={styles.appointmentCard}
-                      style={eCancelado ? { borderLeftColor: 'var(--error)', opacity: 0.6 } : {}}
-                    >
-                      <div className={styles.apptTime}>{hora}</div>
+              return (
+                <div
+                  key={appt.id}
+                  className={styles.appointmentCard}
+                  style={eCancelado ? { borderLeftColor: 'var(--error)', opacity: 0.6 } : {}}
+                >
+                  <div className={styles.apptTime}>{hora}</div>
                       <div className={styles.apptInfo}>
                         <div className={styles.apptClient}>
                           {appt.cliente_nome}

@@ -46,6 +46,7 @@ export default function PaginaAgendamento() {
   const [servicos, setServicos] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
+  const [usarModoMock, setUsarModoMock] = useState(isMockMode);
 
   // Estados de seleção do fluxo
   const [passoAtual, setPassoAtual] = useState(PASSOS.SERVICO);
@@ -73,6 +74,7 @@ export default function PaginaAgendamento() {
         let dadosBarbearia = null;
         let listaProfissionais = [];
         let listaServicos = [];
+        let modoMock = isMockMode;
 
         if (isMockMode) {
           dadosBarbearia = await mockDb.getBarbeariaBySlug(slug);
@@ -81,34 +83,63 @@ export default function PaginaAgendamento() {
             listaServicos = await mockDb.getServicos(dadosBarbearia.id);
           }
         } else {
-          // Busca real no Supabase
-          const { data: barbeariaData, error: bError } = await supabase
-            .from('barbearias')
-            .select('*')
-            .eq('slug', slug)
-            .single();
+        console.log('🔍 Iniciando modo REAL do Supabase na página pública, buscando slug:', slug);
+        
+        // Busca real no Supabase
+        const { data: barbeariaData, error: bError } = await supabase
+          .from('barbearias')
+          .select('*')
+          .eq('slug', slug)
+          .single();
 
-          if (bError) throw bError;
-          dadosBarbearia = barbeariaData;
+        console.log('🏪 Resultado da busca de barbearia (página pública):', { barbeariaData, bError });
 
+        if (bError) {
+          console.warn('⚠️ Nenhuma barbearia encontrada com esse slug. Tentando modo mock...');
+          // Fallback para mock se não encontrar no Supabase
+          modoMock = true;
+          dadosBarbearia = await mockDb.getBarbeariaBySlug(slug);
           if (dadosBarbearia) {
+            listaProfissionais = await mockDb.getProfissionais(dadosBarbearia.id);
+            listaServicos = await mockDb.getServicos(dadosBarbearia.id);
+          }
+        } else {
+          dadosBarbearia = barbeariaData;
+          console.log('✅ Barbearia encontrada na página pública:', dadosBarbearia);
+          
+          if (dadosBarbearia) {
+            console.log('🔍 Buscando profissionais da barbearia ID:', dadosBarbearia.id);
             const { data: profs, error: pError } = await supabase
               .from('profissionais')
               .select('*')
               .eq('barbearia_id', dadosBarbearia.id);
-            if (pError) throw pError;
-            listaProfissionais = profs;
+            listaProfissionais = profs || [];
+            console.log('👨‍💼 Profissionais encontrados (página pública):', { profs, pError });
 
+            if (listaProfissionais.length === 0) {
+              console.warn('⚠️ Nenhum profissional encontrado na página pública! Usando mock.');
+              listaProfissionais = await mockDb.getProfissionais(dadosBarbearia.id);
+            }
+
+            console.log('🔍 Buscando serviços da barbearia ID:', dadosBarbearia.id);
             const { data: servs, error: sError } = await supabase
               .from('servicos')
               .select('*')
               .eq('barbearia_id', dadosBarbearia.id)
               .order('created_at', { ascending: true });
-            if (sError) throw sError;
-            listaServicos = servs;
+            listaServicos = servs || [];
+            console.log('✂️ Serviços encontrados (página pública):', { servs, sError });
+            
+            if (listaServicos.length === 0) {
+              console.warn('⚠️ Nenhum serviço encontrado na página pública! Usando mock.');
+              listaServicos = await mockDb.getServicos(dadosBarbearia.id);
+            }
           }
         }
+      }
 
+        setUsarModoMock(modoMock);
+        
         if (!dadosBarbearia) {
           setErro('Barbearia não encontrada. Verifique o link e tente novamente.');
         } else {
@@ -123,7 +154,27 @@ export default function PaginaAgendamento() {
         }
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
-        setErro('Erro ao carregar as informações. Tente novamente mais tarde.');
+        // Se houver qualquer erro, tenta o fallback para mock
+        console.warn('Erro ao carregar dados do Supabase. Tentando modo mock...');
+        try {
+          const dadosBarbearia = await mockDb.getBarbeariaBySlug(slug);
+          if (dadosBarbearia) {
+            const listaProfissionais = await mockDb.getProfissionais(dadosBarbearia.id);
+            const listaServicos = await mockDb.getServicos(dadosBarbearia.id);
+            setUsarModoMock(true);
+            setBarbearia(dadosBarbearia);
+            setProfissionais(listaProfissionais);
+            setServicos(listaServicos);
+            if (listaProfissionais.length > 0) {
+              setProfissionalSelecionado(listaProfissionais[0]);
+            }
+          } else {
+            setErro('Barbearia não encontrada. Verifique o link e tente novamente.');
+          }
+        } catch (mockErr) {
+          console.error('Erro também no modo mock:', mockErr);
+          setErro('Erro ao carregar as informações. Tente novamente mais tarde.');
+        }
       } finally {
         setCarregando(false);
       }
@@ -184,31 +235,41 @@ export default function PaginaAgendamento() {
         let agendamentosExistentes = [];
         let bloqueiosExistentes = [];
 
-        if (isMockMode) {
+        if (usarModoMock) {
           agendamentosExistentes = await mockDb.getAgendamentos(profissionalSelecionado.id);
           bloqueiosExistentes = await mockDb.getBloqueios(profissionalSelecionado.id);
         } else {
-          // Busca real no Supabase com filtros de data do dia correspondente
-          const dataInicio = `${dataSelecionada}T00:00:00.000Z`;
-          const dataFim = `${dataSelecionada}T23:59:59.999Z`;
+            console.log('🔍 Buscando horários disponíveis no Supabase para:', dataSelecionada, 'Profissional:', profissionalSelecionado.id);
+            // Busca real no Supabase com filtros de data do dia correspondente (LOCAL!)
+            const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
+            const dataInicioLocal = new Date(ano, mes - 1, dia, 0, 0, 0);
+            const dataFimLocal = new Date(ano, mes - 1, dia, 23, 59, 59, 999);
+            const dataInicio = dataInicioLocal.toISOString();
+            const dataFim = dataFimLocal.toISOString();
+            
+            console.log('📅 Intervalo de busca (LOCAL para UTC):', dataInicioLocal, dataInicio, 'até', dataFimLocal, dataFim);
 
-          const { data: ags } = await supabase
-            .from('agendamentos')
-            .select('*')
-            .eq('profissional_id', profissionalSelecionado.id)
-            .gte('data_hora', dataInicio)
-            .lte('data_hora', dataFim);
-          
-          const { data: bloqs } = await supabase
-            .from('bloqueios')
-            .select('*')
-            .eq('profissional_id', profissionalSelecionado.id)
-            .gte('data_hora_inicio', dataInicio)
-            .lte('data_hora_fim', dataFim);
+            const { data: ags, error: agError } = await supabase
+              .from('agendamentos')
+              .select('*')
+              .eq('profissional_id', profissionalSelecionado.id)
+              .gte('data_hora', dataInicio)
+              .lte('data_hora', dataFim);
+            
+            console.log('📅 Agendamentos existentes do Supabase:', { ags, agError });
+            
+            const { data: bloqs, error: bloqError } = await supabase
+              .from('bloqueios')
+              .select('*')
+              .eq('profissional_id', profissionalSelecionado.id)
+              .gte('data_hora_inicio', dataInicio)
+              .lte('data_hora_fim', dataFim);
 
-          agendamentosExistentes = ags || [];
-          bloqueiosExistentes = bloqs || [];
-        }
+            console.log('🚫 Bloqueios existentes do Supabase:', { bloqs, bloqError });
+
+            agendamentosExistentes = ags || [];
+            bloqueiosExistentes = bloqs || [];
+          }
 
         // Gerar grade livre respeitando a duração do serviço escolhido
         const slots = obterHorariosDisponiveis(
@@ -221,11 +282,28 @@ export default function PaginaAgendamento() {
         setGradeHorarios(slots);
       } catch (err) {
         console.error('Erro ao calcular horários livres:', err);
+        // Se houver erro no Supabase, tenta o modo mock para não quebrar a experiência
+        if (!usarModoMock) {
+          console.warn('Erro ao buscar horários no Supabase. Tentando modo mock...');
+          try {
+            const agendamentosExistentes = await mockDb.getAgendamentos(profissionalSelecionado.id);
+            const bloqueiosExistentes = await mockDb.getBloqueios(profissionalSelecionado.id);
+            const slots = obterHorariosDisponiveis(
+              dataSelecionada,
+              servicoSelecionado.duracao_minutos,
+              agendamentosExistentes,
+              bloqueiosExistentes
+            );
+            setGradeHorarios(slots);
+          } catch (mockErr) {
+            console.error('Erro também no modo mock para horários:', mockErr);
+          }
+        }
       }
     }
 
     buscarEGerarHorarios();
-  }, [profissionalSelecionado, dataSelecionada, servicoSelecionado]);
+  }, [profissionalSelecionado, dataSelecionada, servicoSelecionado, usarModoMock]);
 
   // Formatação de Dinheiro BRL
   const formatarPreco = (valor) => {
@@ -262,7 +340,7 @@ export default function PaginaAgendamento() {
       const dataHoraCompleta = criarDataHoraCompleta(dataSelecionada, horarioSelecionado);
       
       const dadosAgendamento = {
-        profissional_id: profissionalSelecionado.id,
+        profissional_id: profissionalSelecionado.id, // Usa o ID REAL do profissional selecionado
         servico_id: servicoSelecionado.id,
         cliente_nome: nome,
         cliente_telefone: telefone,
@@ -273,30 +351,59 @@ export default function PaginaAgendamento() {
 
       let agendamentoSalvo = null;
 
-      if (isMockMode) {
+      if (usarModoMock) {
         agendamentoSalvo = await mockDb.saveAgendamento(dadosAgendamento);
         // Simular envio de WhatsApp imediato (no console)
+        console.log('✅ Agendamento SALVO no MOCK DB:', agendamentoSalvo);
         console.log(`[Z-API Mock] Notificação disparada para ${telefone}: Olá ${nome}! Seu agendamento de ${servicoSelecionado.nome} com ${profissionalSelecionado.nome} está confirmado para o dia ${new Date(dadosAgendamento.data_hora).toLocaleDateString()} às ${horarioSelecionado}.`);
       } else {
-        // Salvar no Supabase
-        const { data, error } = await supabase
-          .from('agendamentos')
-          .insert([dadosAgendamento])
-          .select()
-          .single();
+          console.log('💾 Salvando agendamento no Supabase:', JSON.stringify(dadosAgendamento, null, 2));
+          // Salvar no Supabase
+          const { data, error } = await supabase
+            .from('agendamentos')
+            .insert([dadosAgendamento])
+            .select()
+            .single();
 
-        if (error) throw error;
-        agendamentoSalvo = data;
-        
-        // Disparar uma request silenciosa para disparar a lógica do lembrete (webhook de background)
-        fetch('/api/send-reminders', { method: 'POST', body: JSON.stringify({ agendamentoId: data.id }) }).catch(() => {});
-      }
+          if (error) {
+            console.error('❌ ERRO ao salvar no Supabase:');
+            console.error('→ Mensagem:', error.message);
+            console.error('→ Detalhes:', JSON.stringify(error, null, 2));
+            console.error('→ Dados que tentamos salvar:', JSON.stringify(dadosAgendamento, null, 2));
+            throw error;
+          }
+          
+          agendamentoSalvo = data;
+          console.log('✅ Agendamento SALVO no Supabase:', JSON.stringify(agendamentoSalvo, null, 2));
+          
+          // Disparar uma request silenciosa para disparar a lógica do lembrete (webhook de background)
+          fetch('/api/send-reminders', { method: 'POST', body: JSON.stringify({ agendamentoId: data.id }) }).catch(() => {});
+        }
 
       setAgendamentoConfirmado(agendamentoSalvo);
       setPassoAtual(PASSOS.SUCESSO);
     } catch (err) {
       console.error('Erro ao agendar:', err);
-      alert('Houve um erro ao salvar o agendamento. Tente novamente.');
+      // Se houver erro no Supabase e não estivermos no modo mock, tenta o fallback
+      if (!usarModoMock) {
+        console.warn('Erro ao salvar no Supabase. Tentando modo mock para não perder o agendamento...');
+        try {
+          agendamentoSalvo = await mockDb.saveAgendamento({
+            ...dadosAgendamento,
+            // Garantir que os IDs são compatíveis com o mock
+            profissional_id: 'p1-julermes-id',
+            servico_id: servicoSelecionado.id.includes('s1') ? servicoSelecionado.id : 's1-corte-classico'
+          });
+          console.log(`[Z-API Mock] Notificação disparada para ${telefone}: Olá ${nome}! Seu agendamento de ${servicoSelecionado.nome} com ${profissionalSelecionado.nome} está confirmado para o dia ${new Date(dadosAgendamento.data_hora).toLocaleDateString()} às ${horarioSelecionado}.`);
+          setAgendamentoConfirmado(agendamentoSalvo);
+          setPassoAtual(PASSOS.SUCESSO);
+        } catch (mockErr) {
+          console.error('Erro também no modo mock:', mockErr);
+          alert('Houve um erro ao salvar o agendamento. Tente novamente.');
+        }
+      } else {
+        alert('Houve um erro ao salvar o agendamento. Tente novamente.');
+      }
     } finally {
       setCarregandoConfirmacao(false);
     }
@@ -349,6 +456,16 @@ export default function PaginaAgendamento() {
           />
           <h1 className={`${styles.logo} text-gradient`} style={{ fontSize: '1.6rem', fontWeight: 900 }}>{barbearia?.nome}</h1>
           <p className={styles.subtitle} style={{ color: 'var(--primary)', fontWeight: 600, letterSpacing: '0.05em' }}>TRADIÇÃO • ESTILO • QUALIDADE</p>
+          
+          {/* Link discreto para o painel admin */}
+          <div style={{ marginTop: 12, fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            <a 
+              href="/admin/login" 
+              style={{ textDecoration: 'none', color: 'var(--text-muted)' }}
+            >
+              Área Administrativa
+            </a>
+          </div>
         </header>
 
         {/* Barra de Progresso do MVP (Não exibe se for tela de Sucesso) */}

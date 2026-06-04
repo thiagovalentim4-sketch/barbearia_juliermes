@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase, isMockMode } from '@/lib/supabase';
 import styles from '../admin.module.css';
 import { Lock, Mail, Scissors } from 'lucide-react';
@@ -12,25 +13,6 @@ export default function PaginaLoginAdmin() {
   const [senha, setSenha] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
-
-  useEffect(() => {
-    // Verificar se já está logado
-    if (typeof window !== 'undefined') {
-      const sessaoMock = localStorage.getItem('barber_session');
-      if (sessaoMock) {
-        router.push('/admin/dashboard');
-        return;
-      }
-    }
-
-    if (!isMockMode) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          router.push('/admin/dashboard');
-        }
-      });
-    }
-  }, [router]);
 
   const lidarComLogin = async (e) => {
     e.preventDefault();
@@ -45,18 +27,17 @@ export default function PaginaLoginAdmin() {
 
       if (isMockMode) {
         // Modo Mock: Salvar sessão fictícia e redirecionar
-        localStorage.setItem(
-          'barber_session',
-          JSON.stringify({
-            user: { email, id: 'mock-user-uuid' },
-            token: 'mock-jwt-token'
-          })
-        );
-        
-        // Adicionar uma barbearia mockada ao localStorage para os fluxos funcionarem
-        localStorage.setItem('barber_slug', 'garagem-barber');
-
-        router.push('/admin/dashboard');
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(
+            'barber_session',
+            JSON.stringify({
+              user: { email, id: 'mock-user-uuid' },
+              token: 'mock-jwt-token'
+            })
+          );
+          localStorage.setItem('barber_slug', 'garagem-barber');
+        }
+        router.replace('/admin/dashboard');
       } else {
         // Supabase Auth Real
         const { error } = await supabase.auth.signInWithPassword({
@@ -65,11 +46,15 @@ export default function PaginaLoginAdmin() {
         });
 
         if (error) throw error;
-        router.push('/admin/dashboard');
+        router.replace('/admin/dashboard');
       }
     } catch (err) {
       console.error('Erro de autenticação:', err);
-      setErro(err.message || 'Credenciais inválidas. Tente novamente.');
+      let mensagem = 'Credenciais inválidas. Tente novamente.';
+      if (err.message && err.message.includes('Invalid login credentials')) {
+        mensagem = 'E-mail ou senha incorretos. Verifique os dados e tente novamente.';
+      }
+      setErro(err.message || mensagem);
     } finally {
       setCarregando(false);
     }
@@ -92,7 +77,7 @@ export default function PaginaLoginAdmin() {
 
           {isMockMode && (
             <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', fontSize: '0.8rem', color: 'var(--warning)', textAlign: 'center' }}>
-              💡 Executando em **Modo Demonstração (Mock)**. Digite qualquer e-mail/senha para testar!
+              💡 Executando em <strong>Modo Demonstração (Mock)</strong>. Digite qualquer e-mail/senha para testar!
             </div>
           )}
 
@@ -121,7 +106,12 @@ export default function PaginaLoginAdmin() {
             </div>
 
             <div className="input-group">
-              <label className="input-label" htmlFor="password-input">Senha</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="input-label" htmlFor="password-input">Senha</label>
+                <Link href="/admin/forgot-password" style={{ color: 'var(--primary)', fontSize: '0.8rem', fontWeight: 500 }}>
+                  Esqueci a senha
+                </Link>
+              </div>
               <div style={{ position: 'relative' }}>
                 <Lock size={18} style={{ position: 'absolute', left: 14, top: 14, color: 'var(--text-muted)' }} />
                 <input 

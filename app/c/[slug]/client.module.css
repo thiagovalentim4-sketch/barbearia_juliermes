@@ -3,7 +3,7 @@
   display: flex;
   justify-content: center;
   background-color: var(--bg-primary);
-  padding: 16px;
+  padding: 12px;
 }
 
 .container {
@@ -17,6 +17,34 @@
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Responsividade extra para dispositivos móveis */
+@media (max-width: 480px) {
+  .wrapper {
+    padding: 8px;
+  }
+  
+  .header {
+    padding: 20px 16px;
+  }
+  
+  .logo {
+    font-size: 1.3rem;
+  }
+  
+  .content {
+    padding: 16px;
+    gap: 16px;
+  }
+  
+  .stepTitle {
+    font-size: 1.05rem;
+  }
+  
+  .footer {
+    padding: 16px;
+  }
 }
 
 @keyframes slideUp {
@@ -231,8 +259,23 @@
 .weekDays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 16px;
+}
+
+@media (max-width: 400px) {
+  .weekDays {
+    gap: 4px;
+  }
+  .dayButton {
+    padding: 8px 2px;
+  }
+  .dayLabel {
+    font-size: 0.65rem;
+  }
+  .dayValue {
+    font-size: 0.95rem;
+  }
 }
 
 .dayButton {
@@ -279,6 +322,18 @@
   max-height: 240px;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+@media (max-width: 480px) {
+  .slotsGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 360px) {
+  .slotsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .slotButton {
