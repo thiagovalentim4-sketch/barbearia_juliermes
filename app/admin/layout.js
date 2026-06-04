@@ -4,8 +4,9 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase, isMockMode } from '@/lib/supabase';
 import styles from './admin.module.css';
-import { Calendar, Scissors, LogOut, Loader2, ExternalLink } from 'lucide-react';
-import Link from 'next/link';
+
+// Rotas que não precisam de autenticação
+const ROTAS_PUBLICAS = ['/admin/login', '/admin/forgot-password', '/admin/reset-password'];
 
 export default function AdminLayout({ children }) {
   const router = useRouter();
@@ -13,111 +14,111 @@ export default function AdminLayout({ children }) {
   const [carregando, setCarregando] = useState(true);
   const [usuario, setUsuario] = useState(null);
 
+  // VERIFICAR SESSÃO
   useEffect(() => {
-    // Se for a tela de login, não precisa checar sessão para bloquear
-    if (pathname === '/admin/login') {
+    // Se for rota pública, não faz nada
+    if (ROTAS_PUBLICAS.includes(pathname)) {
       setCarregando(false);
       return;
     }
 
-    async function verificarSessao() {
+    let isMounted = true;
+
+    const verificarSessao = async () => {
       try {
+        let temSessao = false;
+
         if (isMockMode) {
-          const sessaoMock = localStorage.getItem('barber_session');
-          if (!sessaoMock) {
-            router.push('/admin/login');
-          } else {
-            setUsuario(JSON.parse(sessaoMock).user);
+          // Verifica mock
+          if (typeof window !== 'undefined') {
+            const sessaoMock = localStorage.getItem('barber_session');
+            if (sessaoMock) {
+              temSessao = true;
+              setUsuario(JSON.parse(sessaoMock).user);
+            }
           }
         } else {
+          // Verifica Supabase
           const { data: { session } } = await supabase.auth.getSession();
-          if (!session) {
-            router.push('/admin/login');
-          } else {
+          if (session) {
+            temSessao = true;
             setUsuario(session.user);
           }
         }
+
+        // Se não tem sessão, redireciona para login
+        if (!temSessao && isMounted) {
+          console.log('Sem sessão, redirecionando para login...');
+          router.replace('/admin/login');
+        }
       } catch (err) {
         console.error('Erro ao verificar sessão:', err);
-        router.push('/admin/login');
       } finally {
-        setCarregando(false);
+        if (isMounted) {
+          setCarregando(false);
+        }
       }
-    }
+    };
 
     verificarSessao();
+
+    return () => {
+      isMounted = false;
+    };
   }, [pathname, router]);
 
   const fazerLogout = async () => {
-    if (isMockMode) {
-      localStorage.removeItem('barber_session');
-      router.push('/admin/login');
-    } else {
-      await supabase.auth.signOut();
-      router.push('/admin/login');
+    try {
+      if (isMockMode) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('barber_session');
+          localStorage.removeItem('barber_slug');
+        }
+      } else {
+        await supabase.auth.signOut();
+      }
+      router.replace('/admin/login');
+    } catch (err) {
+      console.error('Erro no logout:', err);
+      router.replace('/admin/login');
     }
   };
 
   if (carregando) {
     return (
-      <div style={{ display: 'flex', width: '100vw', height: '100vh', backgroundColor: 'var(--bg-primary)', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-        <Loader2 className="animate-spin" size={32} style={{ color: 'var(--primary)' }} />
-        <span style={{ marginLeft: 12 }}>Verificando credenciais...</span>
+      <div style={{ 
+        display: 'flex', 
+        width: '100vw', 
+        height: '100vh', 
+        backgroundColor: 'var(--bg-primary)', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        color: 'var(--text-secondary)' 
+      }}>
+        Carregando...
       </div>
     );
   }
 
-  // Se for a página de login, renderiza puro sem a barra lateral
-  if (pathname === '/admin/login') {
+  // Se for rota pública, renderiza sem sidebar
+  if (ROTAS_PUBLICAS.includes(pathname)) {
     return <>{children}</>;
   }
 
   return (
-    <div className={styles.adminWrapper}>
-      {/* Barra Lateral Administrativa */}
-      <aside className={styles.sidebar}>
-        <div className={styles.brand}>
-          <Scissors size={22} style={{ color: 'var(--primary)' }} />
-          <span className="text-gradient">BarberSaaS</span>
-        </div>
-
-        <nav className={styles.navLinks}>
-          <Link href="/admin/dashboard" className={`${styles.navLink} ${pathname === '/admin/dashboard' ? styles.navLinkActive : ''}`}>
-            <Calendar size={18} />
-            <span>Agenda</span>
-          </Link>
-          <Link href="/admin/servicos" className={`${styles.navLink} ${pathname === '/admin/servicos' ? styles.navLinkActive : ''}`}>
-            <Scissors size={18} />
-            <span>Serviços</span>
-          </Link>
-          
-          {/* Link para página pública */}
-          <a 
-            href="/c/garagem-barber" 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className={styles.navLink}
-            style={{ marginTop: 'auto', border: '1px dashed var(--border)' }}
-          >
-            <ExternalLink size={16} />
-            <span style={{ fontSize: '0.85rem' }}>Ver Página Pública</span>
+    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>Painel Admin</h1>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <a href="/c/garagem-barber" target="_blank" style={{ textDecoration: 'none', color: 'var(--primary)' }}>
+            Ver Página Pública
           </a>
-        </nav>
-
-        <button 
-          onClick={fazerLogout} 
-          className={styles.navLink} 
-          style={{ width: '100%', marginTop: 'auto', color: 'var(--error)', backgroundColor: 'transparent', border: 'none', textAlign: 'left' }}
-        >
-          <LogOut size={18} />
-          <span>Sair</span>
-        </button>
-      </aside>
-
-      {/* Conteúdo Principal */}
-      <main className={styles.mainContent}>
-        {children}
-      </main>
+          <button onClick={fazerLogout} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer' }}>
+            Sair
+          </button>
+        </div>
+      </div>
+      {children}
     </div>
   );
 }
