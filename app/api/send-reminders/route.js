@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase, isMockMode, mockDb } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 // Credenciais da Z-API (Configuradas nas variáveis de ambiente do Vercel/Supabase)
 const ZAPI_INSTANCE_ID = process.env.ZAPI_INSTANCE_ID || '';
@@ -86,29 +86,16 @@ export async function POST(request) {
     let servico = null;
     let profissional = null;
 
-    if (isMockMode) {
-      // Buscar agendamento dos mocks
-      const ags = await mockDb.getAgendamentos();
-      agendamento = ags.find(a => a.id === agendamentoId);
-      if (agendamento) {
-        const servs = await mockDb.getServicos();
-        servico = servs.find(s => s.id === agendamento.servico_id);
-        const profs = await mockDb.getProfissionais();
-        profissional = profs.find(p => p.id === agendamento.profissional_id);
-      }
-    } else {
-      // Buscar agendamento do Supabase
-      const { data, error } = await supabase
-        .from('agendamentos')
-        .select('*, servicos(*), profissionais(*)')
-        .eq('id', agendamentoId)
-        .single();
-      
-      if (error) throw error;
-      agendamento = data;
-      servico = data.servicos;
-      profissional = data.profissionais;
-    }
+    const { data, error } = await supabase
+      .from('agendamentos')
+      .select('*, servicos(*), profissionais(*)')
+      .eq('id', agendamentoId)
+      .single();
+
+    if (error) throw error;
+    agendamento = data;
+    servico = data.servicos;
+    profissional = data.profissionais;
 
     if (!agendamento) {
       return NextResponse.json({ error: 'Agendamento não encontrado.' }, { status: 404 });
@@ -144,29 +131,21 @@ export async function GET() {
     const duasHoras = new Date(agora.getTime() + 2 * 60 * 60 * 1000);
     const tresHoras = new Date(agora.getTime() + 3 * 60 * 60 * 1000);
 
-    if (isMockMode) {
-      // No modo mock, simulamos lembretes de qualquer agendamento ativo pendente de notificação
-      const ags = await mockDb.getAgendamentos();
-      agendamentosParaNotificar = ags.filter(a => a.status === 'confirmado');
-    } else {
-      // Supabase real: Buscar agendamentos na janela de tempo que ainda não foram notificados
-      // Para fins de simplificação no MVP, buscamos os do dia corrente
-      const { data, error } = await supabase
-        .from('agendamentos')
-        .select('*, servicos(*), profissionais(*)')
-        .eq('status', 'confirmado')
-        .gte('data_hora', duasHoras.toISOString())
-        .lte('data_hora', tresHoras.toISOString());
+    const { data, error } = await supabase
+      .from('agendamentos')
+      .select('*, servicos(*), profissionais(*)')
+      .eq('status', 'confirmado')
+      .gte('data_hora', duasHoras.toISOString())
+      .lte('data_hora', tresHoras.toISOString());
 
-      if (error) throw error;
-      agendamentosParaNotificar = data || [];
-    }
+    if (error) throw error;
+    agendamentosParaNotificar = data || [];
 
     const logs = [];
 
     for (const ag of agendamentosParaNotificar) {
-      const servico = ag.servicos || (await mockDb.getServicos()).find(s => s.id === ag.servico_id);
-      const profissional = ag.profissionais || (await mockDb.getProfissionais()).find(p => p.id === ag.profissional_id);
+      const servico = ag.servicos;
+      const profissional = ag.profissionais;
       
       const dataObj = new Date(ag.data_hora);
       const horaFormatada = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase, isMockMode } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import styles from '../admin.module.css';
 import { Lock, Mail, Scissors } from 'lucide-react';
 
@@ -25,29 +25,13 @@ export default function PaginaLoginAdmin() {
       setCarregando(true);
       setErro('');
 
-      if (isMockMode) {
-        // Modo Mock: Salvar sessão fictícia e redirecionar
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(
-            'barber_session',
-            JSON.stringify({
-              user: { email, id: 'mock-user-uuid' },
-              token: 'mock-jwt-token'
-            })
-          );
-          localStorage.setItem('barber_slug', 'garagem-barber');
-        }
-        router.replace('/admin/dashboard');
-      } else {
-        // Supabase Auth Real
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password: senha
-        });
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password: senha
+      });
 
-        if (error) throw error;
-        router.replace('/admin/dashboard');
-      }
+      if (error) throw error;
+      router.replace('/admin/dashboard');
     } catch (err) {
       console.error('Erro de autenticação:', err);
       let mensagem = 'Credenciais inválidas. Tente novamente.';
@@ -75,11 +59,6 @@ export default function PaginaLoginAdmin() {
             </p>
           </div>
 
-          {isMockMode && (
-            <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', fontSize: '0.8rem', color: 'var(--warning)', textAlign: 'center' }}>
-              💡 Executando em <strong>Modo Demonstração (Mock)</strong>. Digite qualquer e-mail/senha para testar!
-            </div>
-          )}
 
           {erro && (
             <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', fontSize: '0.8rem', color: 'var(--error)', textAlign: 'center' }}>

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { supabase, isMockMode } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import styles from '../admin.module.css';
 import { Mail, ArrowLeft } from 'lucide-react';
 
@@ -23,19 +23,12 @@ export default function PaginaEsqueciSenha() {
       setCarregando(true);
       setErro('');
 
-      if (isMockMode) {
-        // Modo mock: simula envio
-        console.log('[MOCK] E-mail de recuperação enviado para:', email);
-        setSucesso(true);
-      } else {
-        // Supabase real
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: 'http://localhost:3000/admin/reset-password'
-        });
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'http://localhost:3000/admin/reset-password'
+      });
 
-        if (error) throw error;
-        setSucesso(true);
-      }
+      if (error) throw error;
+      setSucesso(true);
     } catch (err) {
       console.error('Erro ao enviar e-mail:', err);
       setErro('Ocorreu um erro ao enviar o e-mail de recuperação.');
@@ -88,11 +81,6 @@ export default function PaginaEsqueciSenha() {
             </p>
           </div>
 
-          {isMockMode && (
-            <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', fontSize: '0.8rem', color: 'var(--warning)', textAlign: 'center' }}>
-              💡 Modo Demonstração: o link aparecerá automaticamente!
-            </div>
-          )}
 
           {erro && (
             <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', fontSize: '0.8rem', color: 'var(--error)', textAlign: 'center' }}>

@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase, mockDb, isMockMode } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import styles from '../admin.module.css';
 import { Scissors, Clock, DollarSign, Plus, Trash2, X } from 'lucide-react';
 
 export default function GestaoServicos() {
   const [servicos, setServicos] = useState([]);
   const [carregando, setCarregando] = useState(true);
-  const [barbeariaId, setBarbeariaId] = useState('b1-barbearia-mock-id');
+  const [barbeariaId, setBarbeariaId] = useState('');
 
   // Estados do Modal
   const [modalAberto, setModalAberto] = useState(false);
@@ -23,57 +23,41 @@ export default function GestaoServicos() {
     async function carregarServicos() {
       try {
         setCarregando(true);
-        let lista = [];
-        let modoMock = isMockMode;
 
-        if (isMockMode) {
-          lista = await mockDb.getServicos(barbeariaId);
-        } else {
-          // No Supabase, buscamos a barbearia do proprietário logado
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: barbeariaData, error } = await supabase
-              .from('barbearias')
-              .select('id')
-              .eq('owner_id', user.id)
-              .single();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        if (!user) throw new Error('Usuário não autenticado.');
 
-            if (barbeariaData) {
-              const bId = barbeariaData.id;
-              setBarbeariaId(bId);
-              const { data: s } = await supabase.from('servicos').select('*').eq('barbearia_id', bId);
-              lista = s || [];
-            } else {
-              // Fallback para mock
-              modoMock = true;
-              lista = await mockDb.getServicos('b1-barbearia-mock-id');
-            }
-          } else {
-            // Fallback para mock
-            modoMock = true;
-            lista = await mockDb.getServicos('b1-barbearia-mock-id');
-          }
-        }
-        
-        setUsarModoMock(modoMock);
-        setServicos(lista);
+        const { data: barbeariaRows, error: barbeariaError } = await supabase
+          .from('barbearias')
+          .select('id')
+          .eq('owner_id', user.id)
+          .limit(1);
+
+        if (barbeariaError) throw barbeariaError;
+        const barbeariaData = (barbeariaRows && barbeariaRows.length > 0) ? barbeariaRows[0] : null;
+        if (!barbeariaData) throw new Error('Nenhuma barbearia cadastrada para este usuário.');
+
+        const bId = barbeariaData.id;
+        setBarbeariaId(bId);
+
+        const { data: s, error: servicosError } = await supabase
+          .from('servicos')
+          .select('*')
+          .eq('barbearia_id', bId);
+
+        if (servicosError) throw servicosError;
+        setServicos(s || []);
       } catch (err) {
         console.error('Erro ao carregar serviços:', err);
-        // Fallback para mock
-        try {
-          const lista = await mockDb.getServicos('b1-barbearia-mock-id');
-          setUsarModoMock(true);
-          setServicos(lista);
-        } catch (mockErr) {
-          console.error('Erro no fallback mock:', mockErr);
-        }
+        setServicos([]);
       } finally {
         setCarregando(false);
       }
     }
 
     carregarServicos();
-  }, [barbeariaId]);
+  }, []);
 
   // Formatar preço em BRL
   const formatarPreco = (valor) => {
@@ -95,31 +79,15 @@ export default function GestaoServicos() {
         descricao
       };
 
-      let salvo = null;
-      if (usarModoMock) {
-        salvo = await mockDb.saveServico(novoServico);
-      } else {
-        try {
-          const { data, error } = await supabase
-            .from('servicos')
-            .insert([novoServico])
-            .select()
-            .single();
-          if (error) throw error;
-          salvo = data;
-        } catch (err) {
-          console.error('Erro no Supabase, usando mock:', err);
-          salvo = await mockDb.saveServico({...novoServico, barbearia_id: 'b1-barbearia-mock-id'});
-        }
-      }
+      const { data, error } = await supabase
+        .from('servicos')
+        .insert([novoServico])
+        .select()
+        .single();
 
-      // Atualizar lista
-      if (usarModoMock) {
-        const lista = await mockDb.getServicos('b1-barbearia-mock-id');
-        setServicos(lista);
-      } else {
-        setServicos([...servicos, salvo]);
-      }
+      if (error) throw error;
+      const salvo = data;
+      setServicos([...servicos, salvo]);
 
       // Resetar form e fechar modal
       setNome('');
@@ -140,21 +108,16 @@ export default function GestaoServicos() {
     if (!confirm('Deseja realmente excluir este serviço? Clientes não poderão mais agendá-lo.')) return;
 
     try {
-      if (usarModoMock) {
-        await mockDb.deleteServico(id);
-      } else {
-        try {
-          const { error } = await supabase.from('servicos').delete().eq('id', id);
-          if (error) throw error;
-        } catch (err) {
-          console.error('Erro no Supabase, usando mock:', err);
-          await mockDb.deleteServico(id);
-        }
-      }
+      const { error } = await supabase.from('servicos').delete().eq('id', id);
+      if (error) throw error;
 
-      // Atualizar lista - usando mock para buscar a última versão
-      const lista = await mockDb.getServicos(usarModoMock ? 'b1-barbearia-mock-id' : barbeariaId);
-      setServicos(lista);
+      const { data: s, error: servicosError } = await supabase
+        .from('servicos')
+        .select('*')
+        .eq('barbearia_id', barbeariaId);
+
+      if (servicosError) throw servicosError;
+      setServicos(s || []);
     } catch (err) {
       console.error('Erro ao deletar serviço:', err);
       alert('Erro ao excluir serviço.');

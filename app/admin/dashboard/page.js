@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase, mockDb, isMockMode } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { criarDataHoraCompleta } from '@/lib/scheduler';
 import styles from '../admin.module.css';
 import { Calendar, Clock, DollarSign, Ban, Plus, X, Trash2, CalendarCheck, ShieldAlert, RefreshCw } from 'lucide-react';
@@ -13,7 +13,7 @@ export default function DashboardAdmin() {
   const [bloqueios, setBloqueios] = useState([]);
   const [servicos, setServicos] = useState([]);
   const [carregando, setCarregando] = useState(true);
-  const [usarModoMock, setUsarModoMock] = useState(isMockMode);
+  const [erroInicializacao, setErroInicializacao] = useState('');
 
   // Estados do Modal de Bloqueio
   const [modalAberto, setModalAberto] = useState(false);
@@ -35,101 +35,42 @@ export default function DashboardAdmin() {
   useEffect(() => {
     async function inicializar() {
       try {
-        let prof = null;
-        let servs = [];
-        let modoMock = isMockMode;
-        
-        if (isMockMode) {
-          const profs = await mockDb.getProfissionais();
-          if (profs.length > 0) prof = profs[0];
-          servs = await mockDb.getServicos();
-        } else {
-        console.log('🔍 Iniciando modo REAL do Supabase...');
-        
-        // Supabase real: busca o usuário logado
         const { data: { user }, error: userError } = await supabase.auth.getUser();
-        console.log('👤 Usuário do Supabase:', { user, userError });
-        
-        if (user) {
-          // Buscar barbearia cujo proprietário é o usuário logado
-          console.log('🔍 Buscando barbearias com owner_id:', user.id);
-          const { data: barbeariaData, error: bError } = await supabase
-            .from('barbearias')
-            .select('*')
-            .eq('owner_id', user.id)
-            .single();
-            
-          console.log('🏪 Resultado da busca de barbearias:', { barbeariaData, bError });
-            
-          if (bError) {
-            console.warn("⚠️ Nenhuma barbearia vinculada ao seu usuário. Usando modo mock.");
-            // Fallback para mock
-            modoMock = true;
-            const profs = await mockDb.getProfissionais();
-            if (profs.length > 0) prof = profs[0];
-            servs = await mockDb.getServicos();
-          } else if (barbeariaData) {
-            console.log('✅ Barbearia encontrada:', barbeariaData);
-            
-            // Buscar profissionais da barbearia encontrada
-            console.log('🔍 Buscando profissionais da barbearia ID:', barbeariaData.id);
-            const { data: profs, error: pError } = await supabase
-              .from('profissionais')
-              .select('*')
-              .eq('barbearia_id', barbeariaData.id);
-              
-            console.log('👨‍💼 Profissionais encontrados:', { profs, pError });
-              
-            if (profs && profs.length > 0) {
-              prof = profs[0]; // Seleciona o primeiro profissional por padrão
-            } else {
-              console.warn('⚠️ Nenhum profissional encontrado! Usando mock.');
-              const profsMock = await mockDb.getProfissionais();
-              if (profsMock.length > 0) prof = profsMock[0];
-            }
-            
-            // Buscar serviços da barbearia encontrada
-            console.log('🔍 Buscando serviços da barbearia ID:', barbeariaData.id);
-            const { data: s, error: sError } = await supabase
-              .from('servicos')
-              .select('*')
-              .eq('barbearia_id', barbeariaData.id);
-              
-            console.log('✂️ Serviços encontrados:', { s, sError });
-            servs = s || [];
-            
-            if (servs.length === 0) {
-              console.warn('⚠️ Nenhum serviço encontrado! Usando mock.');
-              servs = await mockDb.getServicos();
-            }
-          }
-        } else {
-          console.warn('⚠️ Nenhum usuário logado no Supabase! Usando modo mock.');
-          // Se não houver usuário logado, usa modo mock
-          modoMock = true;
-          const profs = await mockDb.getProfissionais();
-          if (profs.length > 0) prof = profs[0];
-          servs = await mockDb.getServicos();
-        }
-      }
-        
-        console.log('🔐 Dashboard inicializado: usarModoMock=', modoMock, 'profissional=', prof, 'servicos=', servs);
-        setUsarModoMock(modoMock);
+        if (userError) throw userError;
+        if (!user) throw new Error('Usuário não autenticado.');
+
+        const { data: barbeariaRows, error: bError } = await supabase
+          .from('barbearias')
+          .select('*')
+          .eq('owner_id', user.id)
+          .limit(1);
+
+        if (bError) throw bError;
+        const barbeariaData = (barbeariaRows && barbeariaRows.length > 0) ? barbeariaRows[0] : null;
+        if (!barbeariaData) throw new Error('Nenhuma barbearia vinculada ao seu usuário.');
+
+        const { data: profs, error: pError } = await supabase
+          .from('profissionais')
+          .select('*')
+          .eq('barbearia_id', barbeariaData.id);
+
+        if (pError) throw pError;
+        if (!profs || profs.length === 0) throw new Error('Nenhum profissional cadastrado para a sua barbearia.');
+
+        const prof = profs[0];
+
+        const { data: s, error: sError } = await supabase
+          .from('servicos')
+          .select('*')
+          .eq('barbearia_id', barbeariaData.id);
+
+        if (sError) throw sError;
+
         setProfissional(prof);
-        setServicos(servs);
+        setServicos(s || []);
       } catch (err) {
         console.error('Erro na inicialização do painel:', err);
-        // Fallback para mock em caso de erro
-        try {
-          const profs = await mockDb.getProfissionais();
-          const prof = profs.length > 0 ? profs[0] : null;
-          const servs = await mockDb.getServicos();
-          setUsarModoMock(true);
-          setProfissional(prof);
-          setServicos(servs);
-        } catch (mockErr) {
-          console.error('Erro no fallback mock:', mockErr);
-        }
+        setErroInicializacao(err?.message || 'Erro ao inicializar o painel. Verifique seu usuário e tente novamente.');
       }
     }
     inicializar();
@@ -144,77 +85,41 @@ export default function DashboardAdmin() {
       let ags = [];
       let bloqs = [];
 
-      if (usarModoMock) {
-        // No modo mock, ignoramos o profissionalId e pegamos TUDO
-        ags = await mockDb.getAgendamentos();
-        bloqs = await mockDb.getBloqueios();
-      } else {
-          try {
-            console.log('📅 Buscando agendamentos no Supabase para:', dataSelecionada, 'Profissional:', profissional.id);
-            
-            // Criar data no fuso horário LOCAL!
-            const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
-            const dataInicioLocal = new Date(ano, mes - 1, dia, 0, 0, 0);
-            const dataFimLocal = new Date(ano, mes - 1, dia, 23, 59, 59, 999);
-            
-            const dataInicio = dataInicioLocal.toISOString();
-            const dataFim = dataFimLocal.toISOString();
-            
-            console.log('📅 Intervalo de busca (LOCAL para UTC):', dataInicioLocal, dataInicio, 'até', dataFimLocal, dataFim);
+      try {
+        console.log('📅 Buscando agendamentos no Supabase para:', dataSelecionada, 'Profissional:', profissional.id);
 
-            const { data: agData, error: agError } = await supabase
-              .from('agendamentos')
-              .select('*, servicos(nome, preco, duracao_minutos)')
-              .eq('profissional_id', profissional.id)
-              .gte('data_hora', dataInicio)
-              .lte('data_hora', dataFim);
-            
-            console.log('📅 Agendamentos do Supabase:', { agData, agError });
-            
-            const { data: bloqData, error: bloqError } = await supabase
-              .from('bloqueios')
-              .select('*')
-              .eq('profissional_id', profissional.id)
-              .gte('data_hora_inicio', dataInicio)
-              .lte('data_hora_fim', dataFim);
+        const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
+        const dataInicioLocal = new Date(ano, mes - 1, dia, 0, 0, 0);
+        const dataFimLocal = new Date(ano, mes - 1, dia, 23, 59, 59, 999);
 
-            console.log('🚫 Bloqueios do Supabase:', { bloqData, bloqError });
+        const dataInicio = dataInicioLocal.toISOString();
+        const dataFim = dataFimLocal.toISOString();
 
-            ags = agData || [];
-            bloqs = bloqData || [];
-          } catch (err) {
-            console.error('❌ Erro ao carregar do Supabase, usando mock:', err);
-            // Fallback para mock
-            ags = await mockDb.getAgendamentos(profissional.id);
-            bloqs = await mockDb.getBloqueios(profissional.id);
-          }
-        }
+        console.log('📅 Intervalo de busca (LOCAL para UTC):', dataInicioLocal, dataInicio, 'até', dataFimLocal, dataFim);
 
-      // Filtrar agendamentos do dia selecionado no frontend se for modo mock
-      if (usarModoMock) {
-        console.log('🔍 Filtrando mock: dataSelecionada=', dataSelecionada, 'total agendamentos=', ags.length);
-        
-        // Criar intervalo do dia selecionado (LOCAL!)
-        const [anoSel, mesSel, diaSel] = dataSelecionada.split('-').map(Number);
-        const inicioDiaLocal = new Date(anoSel, mesSel - 1, diaSel, 0, 0, 0, 0);
-        const fimDiaLocal = new Date(anoSel, mesSel - 1, diaSel, 23, 59, 59, 999);
-        
-        console.log('🔍 Intervalo do dia selecionado (LOCAL):', inicioDiaLocal, 'até', fimDiaLocal);
-        
-        ags = ags.filter(a => {
-          const dataAgendamento = new Date(a.data_hora);
-          const match = dataAgendamento >= inicioDiaLocal && dataAgendamento <= fimDiaLocal;
-          console.log(`   → Agendamento ${a.id}: data_hora=${a.data_hora} (LOCAL: ${dataAgendamento}), match=${match}`);
-          return match;
-        });
+        const { data: agData, error: agError } = await supabase
+          .from('agendamentos')
+          .select('*, servicos(nome, preco, duracao_minutos)')
+          .eq('profissional_id', profissional.id)
+          .gte('data_hora', dataInicio)
+          .lte('data_hora', dataFim);
 
-        bloqs = bloqs.filter(b => {
-          const dataBloqueio = new Date(b.data_hora_inicio);
-          const match = dataBloqueio >= inicioDiaLocal && dataBloqueio <= fimDiaLocal;
-          return match;
-        });
-        
-        console.log('🔍 Agendamentos após filtro:', ags.length);
+        const { data: bloqData, error: bloqError } = await supabase
+          .from('bloqueios')
+          .select('*')
+          .eq('profissional_id', profissional.id)
+          .gte('data_hora_inicio', dataInicio)
+          .lte('data_hora_fim', dataFim);
+
+        if (agError) throw agError;
+        if (bloqError) throw bloqError;
+
+        ags = agData || [];
+        bloqs = bloqData || [];
+      } catch (err) {
+        console.error('❌ Erro ao carregar agendamentos do Supabase:', err);
+        ags = [];
+        bloqs = [];
       }
 
       // Ordenar agendamentos por hora
@@ -228,6 +133,8 @@ export default function DashboardAdmin() {
       setBloqueios(bloqs);
     } catch (err) {
       console.error('Erro ao carregar agenda:', err);
+      setAgendamentos([]);
+      setBloqueios([]);
     } finally {
       setCarregando(false);
     }
@@ -242,7 +149,7 @@ export default function DashboardAdmin() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   };
 
-  // Obter detalhes do serviço para o agendamento (especialmente no modo mock)
+  // Obter detalhes do serviço para o agendamento
   const obterDetalhesServico = (appt) => {
     if (appt.servicos) return appt.servicos;
     return servicos.find(s => s.id === appt.servico_id) || { nome: 'Serviço', preco: 0 };
@@ -252,22 +159,11 @@ export default function DashboardAdmin() {
   const cancelarAgendamento = async (id) => {
     if (!confirm('Deseja realmente cancelar este agendamento? Um lembrete de cancelamento poderá ser enviado.')) return;
     try {
-      if (usarModoMock) {
-        await mockDb.cancelAgendamento(id);
-      } else {
-        try {
-          const { error } = await supabase
-            .from('agendamentos')
-            .update({ status: 'cancelado' })
-            .eq('id', id);
-          if (error) throw error;
-        } catch (err) {
-          console.error('Erro no Supabase, usando mock:', err);
-          await mockDb.cancelAgendamento(id);
-        }
-      }
-      
-      // Atualizar lista local
+      const { error } = await supabase
+        .from('agendamentos')
+        .update({ status: 'cancelado' })
+        .eq('id', id);
+      if (error) throw error;
       carregarAgendaDoDia();
     } catch (err) {
       console.error('Erro ao cancelar agendamento:', err);
@@ -299,23 +195,21 @@ export default function DashboardAdmin() {
         motivo: motivoBloqueio
       };
 
-      if (usarModoMock) {
-        await mockDb.saveBloqueio(dadosBloqueio);
-      } else {
-        try {
-          const { error } = await supabase.from('bloqueios').insert([dadosBloqueio]);
-          if (error) throw error;
-        } catch (err) {
-          console.error('Erro no Supabase, usando mock:', err);
-          await mockDb.saveBloqueio(dadosBloqueio);
-        }
+      const { data: inserted, error } = await supabase.from('bloqueios').insert([dadosBloqueio]).select();
+      console.log('✅ Tentativa de inserir bloqueio retornou:', { inserted, error });
+      if (error) {
+        // Mostrar erro útil para debug
+        console.error('Erro na inserção de bloqueio (detalhes):', error);
+        alert('Erro ao salvar bloqueio: ' + (error.message || JSON.stringify(error)));
+        throw error;
       }
 
+      // Sucesso
       setModalAberto(false);
       carregarAgendaDoDia();
     } catch (err) {
       console.error('Erro ao criar bloqueio:', err);
-      alert('Erro ao salvar bloqueio.');
+      // erro já exibido acima quando disponível
     } finally {
       setSalvandoBloqueio(false);
     }
@@ -324,16 +218,12 @@ export default function DashboardAdmin() {
   // Excluir Bloqueio
   const excluirBloqueio = async (id) => {
     try {
-      if (usarModoMock) {
-        await mockDb.deleteBloqueio(id);
-      } else {
-        try {
-          const { error } = await supabase.from('bloqueios').delete().eq('id', id);
-          if (error) throw error;
-        } catch (err) {
-          console.error('Erro no Supabase, usando mock:', err);
-          await mockDb.deleteBloqueio(id);
-        }
+      const { data: deleted, error } = await supabase.from('bloqueios').delete().eq('id', id).select();
+      console.log('🗑️ Tentativa de deletar bloqueio retornou:', { deleted, error });
+      if (error) {
+        console.error('Erro ao deletar bloqueio:', error);
+        alert('Erro ao remover bloqueio: ' + (error.message || JSON.stringify(error)));
+        throw error;
       }
       carregarAgendaDoDia();
     } catch (err) {
@@ -347,6 +237,20 @@ export default function DashboardAdmin() {
     const s = obterDetalhesServico(a);
     return total + Number(s.preco);
   }, 0);
+
+  if (erroInicializacao) {
+    return (
+      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ maxWidth: 720, width: '100%', borderRadius: 20, padding: 28, backgroundColor: 'rgba(254, 226, 226, 0.95)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#991b1b' }}>
+          <h2 style={{ marginTop: 0, marginBottom: 12 }}>Não foi possível carregar o painel</h2>
+          <p style={{ margin: 0, lineHeight: 1.6 }}>{erroInicializacao}</p>
+          <p style={{ marginTop: 16, lineHeight: 1.6 }}>
+            Verifique se este usuário está vinculado a uma barbearia no Supabase ou faça login com a conta correta.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -362,20 +266,32 @@ export default function DashboardAdmin() {
         <div style={{ display: 'flex', gap: 12 }}>
           <button 
             onClick={async () => {
-              // Adicionar agendamento de teste HOJE
-              const agora = new Date();
-              const dataStr = `${agora.getFullYear()}-${String(agora.getMonth()+1).padStart(2,'0')}-${String(agora.getDate()).padStart(2,'0')}`;
-              const horaStr = `${String(agora.getHours()+1).padStart(2,'0')}:00`;
-              
-              await mockDb.saveAgendamento({
-                profissional_id: 'p1-julermes-id',
-                servico_id: 's2-corte-id',
-                cliente_nome: 'TESTE ADMIN',
-                cliente_telefone: '(11) 99999-9999',
-                data_hora: new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), agora.getHours()+1, 0, 0).toISOString(),
-                status: 'confirmado'
-              });
-              
+              if (!profissional) return;
+              const horaAtual = new Date();
+              const servicoId = servicos?.[0]?.id;
+              if (!servicoId) {
+                alert('Cadastre um serviço antes de testar um agendamento.');
+                return;
+              }
+
+              const inicio = new Date(horaAtual.getFullYear(), horaAtual.getMonth(), horaAtual.getDate(), horaAtual.getHours() + 1, 0, 0);
+              const { error } = await supabase.from('agendamentos').insert([
+                {
+                  profissional_id: profissional.id,
+                  servico_id: servicoId,
+                  cliente_nome: 'TESTE ADMIN',
+                  cliente_telefone: '(11) 99999-9999',
+                  data_hora: inicio.toISOString(),
+                  status: 'confirmado'
+                }
+              ]);
+
+              if (error) {
+                console.error('Erro ao criar agendamento de teste:', error);
+                alert('Falha ao criar agendamento de teste.');
+                return;
+              }
+
               carregarAgendaDoDia();
             }} 
             className="btn btn-secondary"

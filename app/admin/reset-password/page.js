@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase, isMockMode } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import styles from '../admin.module.css';
 import { Lock, ArrowLeft } from 'lucide-react';
 
@@ -36,19 +36,12 @@ export default function PaginaRedefinirSenha() {
       setCarregando(true);
       setErro('');
 
-      if (isMockMode) {
-        // Modo mock: simula redefinição
-        console.log('[MOCK] Senha redefinida com sucesso!');
-        setSucesso(true);
-      } else {
-        // Supabase real
-        const { error } = await supabase.auth.updateUser({
-          password: senha
-        });
+      const { error } = await supabase.auth.updateUser({
+        password: senha
+      });
 
-        if (error) throw error;
-        setSucesso(true);
-      }
+      if (error) throw error;
+      setSucesso(true);
     } catch (err) {
       console.error('Erro ao redefinir senha:', err);
       setErro('Ocorreu um erro ao redefinir sua senha.');
@@ -101,11 +94,6 @@ export default function PaginaRedefinirSenha() {
             </p>
           </div>
 
-          {isMockMode && (
-            <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', fontSize: '0.8rem', color: 'var(--warning)', textAlign: 'center' }}>
-              💡 Modo Demonstração: a senha será redefinida automaticamente!
-            </div>
-          )}
 
           {erro && (
             <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', fontSize: '0.8rem', color: 'var(--error)', textAlign: 'center' }}>
